@@ -2,6 +2,7 @@ import os
 
 import joblib
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 from sklearn.metrics import (
@@ -17,26 +18,29 @@ from xgboost import XGBClassifier
 def main():
     df = pd.read_csv("data/final_rockfall_master_10k.csv")
 
+    # Sensor noise jitter to simulate real-world measurements (deterministic)
+    rng = np.random.default_rng(42)
+    df["rainfall_mm"] = df["rainfall_mm"] * rng.uniform(0.95, 1.05, size=len(df))
+    flip_mask = rng.random(len(df)) <= 0.05
+    df.loc[flip_mask, "instability_score"] = df.loc[flip_mask, "instability_score"] + 1
+
     features = [
         "rainfall_mm",
         "rainfall_3d_avg",
         "humidity_percent",
         "soil_wetness",
-        "adjusted_pore_pressure",
-        "base_fs",
         "slope_angle",
-        "cohesion_kpa",
         "instability_score",
     ]
 
-    missing = [c for c in features + ["final_risk_label"] if c not in df.columns]
+    missing = [c for c in features + ["risk_label"] if c not in df.columns]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
 
     X = df[features]
-    y = df["final_risk_label"].astype(int)
+    y = df["risk_label"].astype(int)
 
-    print("Class distribution (final_risk_label):")
+    print("Class distribution (risk_label):")
     print(y.value_counts().to_string())
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -46,6 +50,10 @@ def main():
         random_state=42,
         stratify=y,
     )
+
+    neg = int((y == 0).sum())
+    pos = int((y == 1).sum())
+    scale_pos_weight = (neg / pos) if pos > 0 else 1.0
 
     model = XGBClassifier(
         n_estimators=300,
@@ -57,13 +65,14 @@ def main():
         random_state=42,
         eval_metric="logloss",
         n_jobs=-1,
+        scale_pos_weight=scale_pos_weight,
     )
 
     model.fit(X_train, y_train)
 
     os.makedirs("models", exist_ok=True)
-    joblib.dump(model, "models/rockfall_xgb_model.pkl")
-    print("Saved model -> models/rockfall_xgb_model.pkl")
+    joblib.dump(model, "models/rockfall_xgb_model_risk_label_noisy.pkl")
+    print("Saved model -> models/rockfall_xgb_model_risk_label_noisy.pkl")
 
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:, 1]
@@ -76,7 +85,7 @@ def main():
     sns.barplot(x=model.feature_importances_, y=features)
     plt.title("Feature Importance (Multi-Source Integration Proof)")
     plt.tight_layout()
-    plt.savefig("models/feature_importance.png", dpi=200)
+    plt.savefig("models/feature_importance_risk_label_noisy.png", dpi=200)
     plt.close()
 
     # Confusion matrix
@@ -87,7 +96,7 @@ def main():
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
     plt.tight_layout()
-    plt.savefig("models/confusion_matrix.png", dpi=200)
+    plt.savefig("models/confusion_matrix_risk_label_noisy.png", dpi=200)
     plt.close()
 
     # ROC curve
@@ -101,10 +110,12 @@ def main():
     plt.ylabel("True Positive Rate")
     plt.legend(loc="lower right")
     plt.tight_layout()
-    plt.savefig("models/roc_curve.png", dpi=200)
+    plt.savefig("models/roc_curve_risk_label_noisy.png", dpi=200)
     plt.close()
 
-    print("\nSaved plots -> models/feature_importance.png, models/confusion_matrix.png, models/roc_curve.png")
+    print(
+        "\nSaved plots -> models/feature_importance_risk_label_noisy.png, models/confusion_matrix_risk_label_noisy.png, models/roc_curve_risk_label_noisy.png"
+    )
 
 
 if __name__ == "__main__":
