@@ -28,11 +28,13 @@ python alert_system.py
 rockfall_prediction_tbp/
 ├── data/                          # 📊 All data files
 │   ├── india_mining_regions_weather_combined.csv  # Weather data (10,228 records)
+│   ├── weather_geotech_combined.csv  # Step 2 fused dataset (weather + geotech)
 │   ├── weather_summary_statistics.csv  # Weather stats
 │   ├── india_mining_regions_weather_comparison.png  # Weather plots
 │   └── rockfall_alerts.log      # Alert system logs
 │
-├── data_fusion.py               # 🏗️ Weather data processing
+├── data_fusion.py               # 🏗️ Step 1: Weather data processing
+├── step2_geotechnical_integration.py  # 🏗️ Step 2: Weather + geotech fusion (non-random mapping)
 ├── dashboard.py                 # 📈 Interactive dashboard
 ├── alert_system.py              # 🚨 Alert notifications
 ├── requirements.txt             # 📦 Python dependencies
@@ -49,8 +51,18 @@ rockfall_prediction_tbp/
 
 ### Features
 - **Environmental**: rainfall_24h, temperature, humidity, soil_wetness (real NASA data)
-- **Geotechnical**: *Add your slope_angle, pore_pressure, cohesion data*
-- **Visual**: *Add your mine imagery for instability analysis*
+- **Geotechnical**: slope_angle, cohesion, internal_friction_angle, pore_pressure, factor_of_safety (from Kaggle)
+- **Fusion features**: adjusted_pore_pressure, rainfall_3d_avg (antecedent rainfall)
+- **Visual**: *Step 3 pending — add your mine imagery for instability analysis*
+
+## 🧠 Step 2 Mapping Logic (Mentor-friendly)
+
+- **Non-random mapping**: Rank-order (CDF/percentile) alignment
+- **How it works**:
+  - Weather rows are sorted by `rainfall_mm` (low → high)
+  - Geotech rows are sorted by `Pore Water Pressure Ratio` (low → high)
+  - Each weather row is mapped to a geotech row at the *same percentile*
+- **Physics link**: rainfall increases pore pressure → reduces Factor of Safety
 
 ## 🎯 System Capabilities
 
