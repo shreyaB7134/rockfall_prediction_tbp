@@ -1,149 +1,165 @@
 """
-Data Fusion Script for Rockfall Prediction System
-Merges slope stability, weather, and image datasets into master training dataset
+Enhanced Data Fusion Script for Rockfall Prediction System
+Combines weather data loading and fusion into single process
+Uses real weather data from 4 Indian mining regions
 """
 
 import pandas as pd
 import numpy as np
 import json
 import os
+from datetime import datetime
 from typing import Dict, List
 
-def create_sample_datasets():
-    """Create sample datasets for demonstration since actual datasets aren't provided"""
+def read_nasa_weather_csv(filepath, region_name):
+    """Read NASA POWER weather CSV file and extract location info"""
     
-    # Create sample slope stability dataset
-    np.random.seed(42)
-    n_samples = 500
+    with open(filepath, 'r') as f:
+        lines = f.readlines()
     
-    slope_data = {
-        'slope_angle': np.random.uniform(15, 45, n_samples),
-        'pore_water_pressure': np.random.uniform(0.1, 0.9, n_samples),
-        'factor_of_safety': np.random.uniform(0.5, 2.0, n_samples),
-        'location_id': [f'slope_{i}' for i in range(n_samples)]
+    # Extract location information from header
+    location_info = {}
+    for line in lines:
+        if 'Location:' in line:
+            # Extract coordinates - handle the specific format
+            # Line format: Location: latitude  23.7957   longitude 86.4304
+            parts = line.split()
+            try:
+                lat_idx = parts.index('latitude')
+                lon_idx = parts.index('longitude')
+                location_info['latitude'] = float(parts[lat_idx + 1])
+                location_info['longitude'] = float(parts[lon_idx + 1])
+            except (ValueError, IndexError):
+                # Fallback parsing
+                import re
+                coords = re.findall(r'[-+]?\d*\.\d+|\d+', line)
+                if len(coords) >= 2:
+                    location_info['latitude'] = float(coords[0])
+                    location_info['longitude'] = float(coords[1])
+        elif 'elevation' in line and '=' in line:
+            # Extract elevation
+            elev_str = line.split('=')[1].split('meters')[0].strip()
+            location_info['elevation'] = float(elev_str)
+    
+    # Find the start of data (after -END HEADER-)
+    data_start = 0
+    for i, line in enumerate(lines):
+        if '-END HEADER-' in line:
+            data_start = i + 1
+            break
+    
+    # Read the data portion
+    data_lines = lines[data_start:]
+    if not data_lines:
+        return None
+    
+    # Parse CSV data
+    from io import StringIO
+    df = pd.read_csv(StringIO(''.join(data_lines)))
+    
+    # Add region and location information
+    df['region'] = region_name
+    df['latitude'] = location_info.get('latitude', np.nan)
+    df['longitude'] = location_info.get('longitude', np.nan)
+    df['elevation'] = location_info.get('elevation', np.nan)
+    
+    return df
+
+def convert_units_and_clean(df):
+    """Convert units and clean the weather data"""
+    
+    # Convert precipitation from inches/day to mm/day (1 inch = 25.4 mm)
+    df['rainfall_mm'] = df['PRECTOTCORR'] * 25.4
+    
+    # Convert temperature from Fahrenheit to Celsius
+    df['temperature_c'] = (df['T2M'] - 32) * 5/9
+    
+    # Convert wind speed from mph to km/h (1 mph = 1.60934 km/h)
+    df['wind_speed_kmh'] = df['WS2M'] * 1.60934
+    
+    # Rename columns for clarity
+    df = df.rename(columns={
+        'RH2M': 'humidity_percent',
+        'GWETTOP': 'soil_wetness',
+        'YEAR': 'year',
+        'DOY': 'day_of_year'
+    })
+    
+    # Replace -999 (missing data) with NaN
+    df = df.replace(-999, np.nan)
+    
+    # Create date column from year and day of year
+    df['date'] = pd.to_datetime(df['year'].astype(str) + '-' + df['day_of_year'].astype(str), format='%Y-%j')
+    
+    # Select and reorder relevant columns
+    final_columns = [
+        'date', 'year', 'day_of_year', 'region', 'latitude', 'longitude', 'elevation',
+        'rainfall_mm', 'temperature_c', 'humidity_percent', 'wind_speed_kmh', 'soil_wetness'
+    ]
+    
+    df = df[final_columns]
+    
+    return df
+
+def load_and_combine_weather_data():
+    """Load and combine weather data from 4 Indian mining regions"""
+    
+    # File paths
+    weather_files = {
+        'Odisha': r"C:\Users\akshi\Downloads\Odisha (Keonjhar Iron Ore Mines).csv",
+        'Jharkhand': r"C:\Users\akshi\Downloads\Jharkhand (Jharia Coalfield).csv",
+        'Karnataka': r"C:\Users\akshi\Downloads\Karnataka (Bellary Iron Ore Belt).csv",
+        'Chhattisgarh': r"C:\Users\akshi\Downloads\Chhattisgarh (Korba Coal Mines).csv"
     }
-    slope_df = pd.DataFrame(slope_data)
-    slope_df.to_csv('slope_data.csv', index=False)
     
-    # Create sample weather dataset (NASA-style)
-    weather_data = {
-        'prectot': np.random.uniform(0, 100, n_samples),  # precipitation
-        'temperature': np.random.uniform(10, 35, n_samples),
-        'humidity': np.random.uniform(30, 90, n_samples),
-        'soil_wetness': np.random.uniform(0.1, 0.8, n_samples),
-        'location_id': [f'weather_{i}' for i in range(n_samples)]
-    }
-    weather_df = pd.DataFrame(weather_data)
-    weather_df.to_csv('nasa_weather.csv', index=False)
+    all_data = []
     
-    # Create sample image annotations
-    image_annotations = []
-    for i in range(n_samples):
-        num_boxes = np.random.randint(0, 5)
-        boxes = []
-        for j in range(num_boxes):
-            boxes.append({
-                'label': int(np.random.choice([0, 1])),  # 0=stable, 1=unstable
-                'bbox': [int(np.random.randint(0, 100)), int(np.random.randint(0, 100)), 
-                        int(np.random.randint(20, 50)), int(np.random.randint(20, 50))]
-            })
+    print("🌤️  Loading Weather Data from Indian Mining Regions")
+    print("=" * 60)
+    
+    for region, filepath in weather_files.items():
+        print(f"\n📍 Processing {region}...")
         
-        image_annotations.append({
-            'image_id': f'img_{i}',
-            'annotations': boxes
-        })
+        if not os.path.exists(filepath):
+            print(f"❌ File not found: {filepath}")
+            continue
+        
+        try:
+            # Read and process the data
+            df = read_nasa_weather_csv(filepath, region)
+            
+            if df is not None:
+                # Convert units and clean
+                df_clean = convert_units_and_clean(df)
+                
+                print(f"✅ {region}: {len(df_clean)} records loaded")
+                print(f"   Date range: {df_clean['date'].min()} to {df_clean['date'].max()}")
+                print(f"   Location: {df_clean['latitude'].iloc[0]:.4f}°N, {df_clean['longitude'].iloc[0]:.4f}°E")
+                
+                all_data.append(df_clean)
+            else:
+                print(f"❌ Failed to read {region} data")
+                
+        except Exception as e:
+            print(f"❌ Error processing {region}: {str(e)}")
     
-    with open('image_annotations.json', 'w') as f:
-        json.dump(image_annotations, f, indent=2)
+    if not all_data:
+        print("\n❌ No weather data was successfully loaded!")
+        return None
     
-    return slope_df, weather_df, image_annotations
-
-def extract_instability_scores(annotation_file: str) -> pd.DataFrame:
-    """Extract instability scores from image annotation JSON"""
+    # Combine all dataframes
+    print(f"\n🔗 Combining weather data from {len(all_data)} regions...")
+    combined_df = pd.concat(all_data, ignore_index=True)
     
-    with open(annotation_file, 'r') as f:
-        annotations = json.load(f)
+    # Sort by date and region
+    combined_df = combined_df.sort_values(['date', 'region']).reset_index(drop=True)
     
-    instability_data = []
-    for img_data in annotations:
-        img_id = img_data['image_id']
-        unstable_count = sum(1 for ann in img_data['annotations'] if ann['label'] == 1)
-        instability_data.append({
-            'image_id': img_id,
-            'instability_score': unstable_count
-        })
+    # Save combined dataset
+    output_file = 'data/india_mining_regions_weather_combined.csv'
+    combined_df.to_csv(output_file, index=False)
+    print(f"💾 Combined weather data saved as: {output_file}")
     
-    return pd.DataFrame(instability_data)
-
-def create_master_dataset(n_scenarios: int = 1000) -> pd.DataFrame:
-    """Create master training dataset by sampling from all three sources"""
-    
-    # Load datasets
-    try:
-        slope_df = pd.read_csv('slope_data.csv')
-        weather_df = pd.read_csv('nasa_weather.csv')
-        image_features = extract_instability_scores('image_annotations.json')
-    except FileNotFoundError:
-        print("Sample datasets not found. Creating sample data...")
-        slope_df, weather_df, _ = create_sample_datasets()
-        image_features = extract_instability_scores('image_annotations.json')
-    
-    # Create master dataframe with randomized alignment
-    master_df = pd.DataFrame()
-    
-    # Sample from each dataset to create mining scenarios
-    master_df['slope_angle'] = slope_df['slope_angle'].sample(n_scenarios, replace=True, random_state=42).values
-    master_df['pore_pressure'] = slope_df['pore_water_pressure'].sample(n_scenarios, replace=True, random_state=43).values
-    master_df['factor_of_safety'] = slope_df['factor_of_safety'].sample(n_scenarios, replace=True, random_state=44).values
-    
-    master_df['rainfall'] = weather_df['prectot'].sample(n_scenarios, replace=True, random_state=45).values
-    master_df['temperature'] = weather_df['temperature'].sample(n_scenarios, replace=True, random_state=46).values
-    master_df['humidity'] = weather_df['humidity'].sample(n_scenarios, replace=True, random_state=47).values
-    master_df['soil_wetness'] = weather_df['soil_wetness'].sample(n_scenarios, replace=True, random_state=48).values
-    
-    master_df['instability_score'] = image_features['instability_score'].sample(n_scenarios, replace=True, random_state=49).values
-    
-    # Create risk labels using logic-based approach
-    # High risk if: factor_of_safety < 1 OR (high pore_pressure AND high rainfall) OR instability_score > 2
-    master_df['risk_label'] = np.where(
-        (master_df['factor_of_safety'] < 1.0) |
-        ((master_df['pore_pressure'] > 0.7) & (master_df['rainfall'] > 50)) |
-        (master_df['instability_score'] > 2),
-        1, 0
-    )
-    
-    # Add scenario IDs for tracking
-    master_df['scenario_id'] = [f'scenario_{i}' for i in range(n_scenarios)]
-    
-    return master_df
-
-def main():
-    """Main function to create and save the master dataset"""
-    
-    print("Creating master training dataset...")
-    
-    # Create master dataset
-    master_df = create_master_dataset(n_scenarios=1000)
-    
-    # Save to CSV
-    master_df.to_csv('master_train.csv', index=False)
-    
-    # Display dataset statistics
-    print(f"\nDataset created with {len(master_df)} scenarios")
-    print(f"Risk distribution: {master_df['risk_label'].value_counts().to_dict()}")
-    print(f"Risk percentage: {master_df['risk_label'].mean() * 100:.1f}%")
-    
-    # Display sample data
-    print("\nSample data:")
-    print(master_df.head())
-    
-    # Display feature statistics
-    print("\nFeature statistics:")
-    print(master_df.describe())
-    
-    print("\nMaster dataset saved as 'master_train.csv'")
-    
-    return master_df
+    return combined_df
 
 if __name__ == "__main__":
-    master_df = main()
+    weather_df = main()

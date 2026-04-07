@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('rockfall_alerts.log'),
+        logging.FileHandler('data/rockfall_alerts.log'),
         logging.StreamHandler()
     ]
 )

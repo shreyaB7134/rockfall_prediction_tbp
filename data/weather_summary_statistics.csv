@@ -1,0 +1,7 @@
+,rainfall_mm,rainfall_mm,rainfall_mm,rainfall_mm,rainfall_mm,temperature_c,temperature_c,temperature_c,temperature_c,humidity_percent,humidity_percent,humidity_percent,humidity_percent,wind_speed_kmh,wind_speed_kmh,wind_speed_kmh,wind_speed_kmh,soil_wetness,soil_wetness,soil_wetness,soil_wetness
+,count,mean,std,min,max,mean,std,min,max,mean,std,min,max,mean,std,min,max,mean,std,min,max
+region,,,,,,,,,,,,,,,,,,,,,
+Chhattisgarh,2557,4.25,8.99,0.0,127.0,24.91,4.77,10.71,35.59,70.59,18.16,12.5,95.68,6.27,2.9,1.19,31.49,0.64,0.22,0.13,0.99
+Jharkhand,2557,0.08,3.25,0.0,163.83,22.63,7.99,5.2,36.36,29.56,14.1,5.61,73.03,9.86,2.92,3.17,22.29,0.05,0.04,0.03,0.4
+Karnataka,2557,1.8,4.43,0.0,48.01,26.73,3.17,18.95,35.96,61.24,18.38,17.22,92.45,11.46,5.53,2.09,32.54,0.5,0.22,0.12,0.95
+Odisha,2557,3.73,8.52,0.0,191.77,24.68,6.07,9.08,38.96,66.78,19.26,12.07,95.44,6.84,3.07,1.8,29.48,0.63,0.18,0.19,0.97
