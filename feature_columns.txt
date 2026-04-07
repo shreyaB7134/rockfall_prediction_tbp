@@ -1,0 +1,4 @@
+slope_angle
+pore_pressure
+rainfall_24h
+instability_score

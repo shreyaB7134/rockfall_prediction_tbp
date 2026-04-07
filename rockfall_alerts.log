@@ -1,0 +1,4 @@
+2026-04-07 13:52:58,453 - INFO - Email alert sent for risk level: 95.0%
+2026-04-07 13:52:58,455 - INFO - SMS alert sent for risk level: 95.0%
+2026-04-07 13:52:58,456 - WARNING - Critical alert triggered for scenario test_scenario_1: 95.0%
+2026-04-07 13:52:58,459 - INFO - High risk detected for scenario test_scenario_2: 65.0%
